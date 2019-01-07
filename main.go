@@ -3,21 +3,22 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/gorilla/mux"
-	_ "github.com/gorilla/mux"
-	"github.com/streadway/amqp"
-	_ "github.com/valyala/fasthttp"
 	"io/ioutil"
 	"log"
 	"net/http"
-	_"github.com/json-iterator/go"
+
+	"github.com/gorilla/mux"
+	_ "github.com/gorilla/mux"
+	_ "github.com/json-iterator/go"
+	"github.com/streadway/amqp"
+	_ "github.com/valyala/fasthttp"
 )
 
 type RabbitMQ struct {
 	ConnStr, Port, QueueName string
 	Channel                  *amqp.Channel
-	Connection *amqp.Connection
-	Queue *amqp.Queue
+	Connection               *amqp.Connection
+	Queue                    *amqp.Queue
 }
 
 type MQMessage struct {
@@ -33,24 +34,26 @@ type Message struct {
 }
 
 type Receivers struct {
-	To string
-	Cc []string
+	To  string
+	Cc  []string
 	Bcc []string
 }
 
 type MailModel struct {
-	RefId, FromName, FromAddress,Description, SystemName string
-	Attachments []Attachment
-	Message Message
-	Receivers Receivers
+	RefId, FromName, FromAddress, Description, SystemName string
+	Attachments                                           []Attachment
+	Message                                               Message
+	Receivers                                             Receivers
 }
+
 var instantiated *RabbitMQ = nil
 
-func GetRabbitMQInstance(connStr string, QueueName string) *RabbitMQ{
-	if instantiated == nil{
-		instantiated = NewRabbitMQ(connStr,QueueName)
+func GetRabbitMQInstance(connStr string, QueueName string) *RabbitMQ {
+	if instantiated == nil {
+		instantiated = NewRabbitMQ(connStr, QueueName)
 	}
-	return  instantiated
+
+	return instantiated
 }
 
 func NewRabbitMQ(connStr string, QueueName string) *RabbitMQ {
@@ -72,39 +75,37 @@ func NewRabbitMQ(connStr string, QueueName string) *RabbitMQ {
 
 func (r *RabbitMQ) PublishMessage(message *MailModel) {
 
-	m, e:= json.Marshal(&message)
+	m, e := json.Marshal(&message)
 
-	if e != nil{
+	if e != nil {
 		fmt.Println(e)
 		return
 	}
 
 	err := r.Channel.Publish(
-		"",     // exchange
+		"",          // exchange
 		r.QueueName, // routing key
-		false,  // mandatory
-		false,  // immediate
+		false,       // mandatory
+		false,       // immediate
 		amqp.Publishing{
 			ContentType: "application/json",
 			Body:        m,
 		})
 
-	if err != nil{
+	if err != nil {
 		log.Println(err)
 	}
-	log.Printf("Message: %s", message.Message)
-
 }
 
-func (r* RabbitMQ) ConnectionClose() {
+func (r *RabbitMQ) ConnectionClose() {
 	r.Connection.Close()
 }
 
-func (r *RabbitMQ) ChannelClone(){
+func (r *RabbitMQ) ChannelClone() {
 	r.Channel.Close()
 }
 
-func queueDeclare(r *RabbitMQ){
+func queueDeclare(r *RabbitMQ) {
 
 	_, err := r.Channel.QueueDeclare(
 		r.QueueName, // name of the queue
@@ -119,19 +120,19 @@ func queueDeclare(r *RabbitMQ){
 	}
 }
 
-func createChannel(r *RabbitMQ){
-	ch,_ :=r.Connection.Channel()
+func createChannel(r *RabbitMQ) {
+	ch, _ := r.Connection.Channel()
 	r.Channel = ch
 }
 
-func SendRabbit(w http.ResponseWriter, r *http.Request) () {
+func SendRabbit(w http.ResponseWriter, r *http.Request) {
 
-	rmq := GetRabbitMQInstance("amqp://guest:guest@localhost:5672/","mail-test-queue")
+	rmq := GetRabbitMQInstance("amqp://guest:guest@localhost:5672/", "mail-test-queue")
 
-	m:= new(MailModel)
+	m := new(MailModel)
 	b, _ := ioutil.ReadAll(r.Body)
-	err := json.Unmarshal(b,&m)
-	if err != nil{
+	err := json.Unmarshal(b, &m)
+	if err != nil {
 		fmt.Println(err)
 		return
 	}
@@ -142,9 +143,8 @@ func SendRabbit(w http.ResponseWriter, r *http.Request) () {
 func main() {
 	fmt.Println("hello kitty!")
 
-
 	mux := mux.NewRouter()
 	mux.HandleFunc("/api/send", SendRabbit)
 
-	http.ListenAndServe(":3000",mux)
+	http.ListenAndServe(":3000", mux)
 }
