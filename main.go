@@ -3,11 +3,11 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/valyala/fasthttp"
-	"log"
 	"github.com/buaazp/fasthttprouter"
 	"github.com/json-iterator/go"
 	"github.com/streadway/amqp"
+	"github.com/valyala/fasthttp"
+	"log"
 )
 
 type RabbitMQ struct {
@@ -144,7 +144,7 @@ func main() {
 	mux.HandleFunc("/api/send", SendRabbit)*/
 
 	router := fasthttprouter.New()
-	router.GET("/api/send", SendRabbit)
+	router.POST("/api/send", SendRabbit)
 
 	fasthttp.ListenAndServe(":3000", router.Handler)
 }
