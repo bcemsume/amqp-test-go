@@ -3,15 +3,11 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"github.com/valyala/fasthttp"
 	"log"
-	"net/http"
-
-	"github.com/gorilla/mux"
-	_ "github.com/gorilla/mux"
-	_ "github.com/json-iterator/go"
+	"github.com/buaazp/fasthttprouter"
+	"github.com/json-iterator/go"
 	"github.com/streadway/amqp"
-	_ "github.com/valyala/fasthttp"
 )
 
 type RabbitMQ struct {
@@ -75,6 +71,7 @@ func NewRabbitMQ(connStr string, QueueName string) *RabbitMQ {
 
 func (r *RabbitMQ) PublishMessage(message *MailModel) {
 
+	var json = jsoniter.ConfigCompatibleWithStandardLibrary
 	m, e := json.Marshal(&message)
 
 	if e != nil {
@@ -125,13 +122,13 @@ func createChannel(r *RabbitMQ) {
 	r.Channel = ch
 }
 
-func SendRabbit(w http.ResponseWriter, r *http.Request) {
+func SendRabbit(ctx *fasthttp.RequestCtx) {
 
 	rmq := GetRabbitMQInstance("amqp://guest:guest@localhost:5672/", "mail-test-queue")
 
 	m := new(MailModel)
-	b, _ := ioutil.ReadAll(r.Body)
-	err := json.Unmarshal(b, &m)
+
+	err := json.Unmarshal(ctx.Request.Body(), &m)
 	if err != nil {
 		fmt.Println(err)
 		return
@@ -143,8 +140,11 @@ func SendRabbit(w http.ResponseWriter, r *http.Request) {
 func main() {
 	fmt.Println("hello kitty!")
 
-	mux := mux.NewRouter()
-	mux.HandleFunc("/api/send", SendRabbit)
+	/*mux := mux.NewRouter()
+	mux.HandleFunc("/api/send", SendRabbit)*/
 
-	http.ListenAndServe(":3000", mux)
+	router := fasthttprouter.New()
+	router.GET("/api/send", SendRabbit)
+
+	fasthttp.ListenAndServe(":3000", router.Handler)
 }
