@@ -1,13 +1,15 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
-	"github.com/buaazp/fasthttprouter"
 	"github.com/json-iterator/go"
 	"github.com/streadway/amqp"
-	"github.com/valyala/fasthttp"
 	"log"
+	"math"
+
+	"github.com/AdhityaRamadhanus/fasthttpcors"
+	"github.com/qiangxue/fasthttp-routing"
+	"github.com/valyala/fasthttp"
 )
 
 type RabbitMQ struct {
@@ -71,8 +73,7 @@ func NewRabbitMQ(connStr string, QueueName string) *RabbitMQ {
 
 func (r *RabbitMQ) PublishMessage(message *MailModel) {
 
-	var json = jsoniter.ConfigCompatibleWithStandardLibrary
-	m, e := json.Marshal(&message)
+	m, e := jsoniter.Marshal(&message)
 
 	if e != nil {
 		fmt.Println(e)
@@ -122,29 +123,32 @@ func createChannel(r *RabbitMQ) {
 	r.Channel = ch
 }
 
-func SendRabbit(ctx *fasthttp.RequestCtx) {
+func SendRabbit(ctx *routing.Context) error {
 
 	rmq := GetRabbitMQInstance("amqp://guest:guest@localhost:5672/", "mail-test-queue")
 
 	m := new(MailModel)
 
-	err := json.Unmarshal(ctx.Request.Body(), &m)
+	err := jsoniter.Unmarshal(ctx.Request.Body(), &m)
 	if err != nil {
 		fmt.Println(err)
-		return
+		return err
 	}
 
 	rmq.PublishMessage(m)
+	return nil
 }
 
 func main() {
 	fmt.Println("hello kitty!")
 
-	/*mux := mux.NewRouter()
-	mux.HandleFunc("/api/send", SendRabbit)*/
+	withCors := fasthttpcors.NewCorsHandler(fasthttpcors.Options{
+		AllowMaxAge: math.MaxInt32,
+	})
 
-	router := fasthttprouter.New()
-	router.POST("/api/send", SendRabbit)
+	router := routing.New()
 
-	fasthttp.ListenAndServe(":3000", router.Handler)
+	router.Post("/api/send", SendRabbit)
+
+	panic(fasthttp.ListenAndServe(":3000", withCors.CorsMiddleware(router.HandleRequest)))
 }
