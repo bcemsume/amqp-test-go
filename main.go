@@ -2,10 +2,11 @@ package main
 
 import (
 	"fmt"
-	"github.com/json-iterator/go"
-	"github.com/streadway/amqp"
 	"log"
 	"math"
+
+	"github.com/json-iterator/go"
+	"github.com/streadway/amqp"
 
 	"github.com/AdhityaRamadhanus/fasthttpcors"
 	"github.com/qiangxue/fasthttp-routing"
@@ -17,6 +18,8 @@ type RabbitMQ struct {
 	Channel                  *amqp.Channel
 	Connection               *amqp.Connection
 	Queue                    *amqp.Queue
+	errorChannel             chan *amqp.Error
+	closed                   bool
 }
 
 type MQMessage struct {
@@ -50,6 +53,7 @@ func GetRabbitMQInstance(connStr string, QueueName string) *RabbitMQ {
 	if instantiated == nil {
 		instantiated = NewRabbitMQ(connStr, QueueName)
 	}
+	go instantiated.reconnector()
 
 	return instantiated
 }
@@ -57,17 +61,7 @@ func GetRabbitMQInstance(connStr string, QueueName string) *RabbitMQ {
 func NewRabbitMQ(connStr string, QueueName string) *RabbitMQ {
 
 	var r = &RabbitMQ{ConnStr: connStr, QueueName: QueueName}
-
-	conn, _ := amqp.Dial(r.ConnStr)
-	r.Connection = conn
-	fmt.Println("amqp connected.!")
-
-	createChannel(r)
-
-	fmt.Println("channel created.!")
-
-	queueDeclare(r)
-
+	r.connect()
 	return r
 }
 
@@ -103,7 +97,42 @@ func (r *RabbitMQ) ChannelClone() {
 	r.Channel.Close()
 }
 
-func queueDeclare(r *RabbitMQ) {
+func (r *RabbitMQ) close() {
+	r.closed = true
+	r.Channel.Close()
+	r.Connection.Close()
+}
+
+func (r *RabbitMQ) connect() {
+
+	conn, _ := amqp.Dial(r.ConnStr)
+	r.Connection = conn
+	fmt.Println("amqp connected.!")
+
+	r.errorChannel = make(chan *amqp.Error)
+	r.Connection.NotifyClose(r.errorChannel)
+
+	createChannel(r)
+
+	fmt.Println("channel created.!")
+
+	QueueDeclare(r)
+}
+
+func (q *RabbitMQ) reconnector() {
+	for {
+		err := <-q.errorChannel
+		if err != nil {
+			fmt.Println("Reconnecting after connection closed", err)
+
+			q.connect()
+		} else {
+			return
+		}
+	}
+}
+
+func QueueDeclare(r *RabbitMQ) {
 
 	_, err := r.Channel.QueueDeclare(
 		r.QueueName, // name of the queue
@@ -136,6 +165,7 @@ func SendRabbit(ctx *routing.Context) error {
 	}
 
 	rmq.PublishMessage(m)
+
 	return nil
 }
 
