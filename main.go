@@ -53,7 +53,6 @@ func GetRabbitMQInstance(connStr string, QueueName string) *RabbitMQ {
 	if instantiated == nil {
 		instantiated = NewRabbitMQ(connStr, QueueName)
 	}
-	go instantiated.reconnector()
 
 	return instantiated
 }
@@ -62,6 +61,9 @@ func NewRabbitMQ(connStr string, QueueName string) *RabbitMQ {
 
 	var r = &RabbitMQ{ConnStr: connStr, QueueName: QueueName}
 	r.connect()
+
+	go r.reconnector()
+
 	return r
 }
 
