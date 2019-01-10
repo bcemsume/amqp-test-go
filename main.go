@@ -48,18 +48,20 @@ type MailModel struct {
 	Receivers                                             Receivers
 }
 
-var instantiated *RabbitMQ // NewRabbitMQ("amqp://skybbdjj:1iDqFi_H-qEs64PU13TWWtQG8jTGdEnk@fly.rmq.cloudamqp.com/skybbdjj", "mail-test-queue")
-
 var (
-	singleton *RabbitMQ
-	once      sync.Once
+	instantiated *RabbitMQ
+	memoryAccess sync.Mutex
 )
 
-func Singleton() *RabbitMQ {
-	once.Do(func() {
-		singleton = NewRabbitMQ("amqp://skybbdjj:1iDqFi_H-qEs64PU13TWWtQG8jTGdEnk@fly.rmq.cloudamqp.com/skybbdjj", "mail-test-queue")
-	})
-	return singleton
+func GetRabbitMQInstance(connStr string, QueueName string) *RabbitMQ {
+	memoryAccess.Lock()
+
+	if instantiated == nil {
+		instantiated = NewRabbitMQ(connStr, QueueName)
+	}
+	memoryAccess.Unlock()
+
+	return instantiated
 }
 
 func NewRabbitMQ(connStr string, QueueName string) *RabbitMQ {
@@ -133,7 +135,7 @@ func (q *RabbitMQ) reconnector() {
 			if err != nil {
 				fmt.Println("Reconnecting after connection closed", err)
 
-				//q.connect()
+				q.connect()
 			} else {
 				return
 			}
@@ -162,8 +164,8 @@ func (r *RabbitMQ) createChannel() {
 }
 
 func SendRabbit(ctx *routing.Context) error {
-	rmq := Singleton()
 
+	rmq := GetRabbitMQInstance("amqp://localhost:5672/", "mail-test-queue")
 	m := new(MailModel)
 
 	err := jsoniter.Unmarshal(ctx.Request.Body(), &m)
