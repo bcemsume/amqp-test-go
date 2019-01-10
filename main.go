@@ -4,12 +4,13 @@ import (
 	"fmt"
 	"log"
 	"math"
+	"sync"
 
-	"github.com/json-iterator/go"
+	jsoniter "github.com/json-iterator/go"
 	"github.com/streadway/amqp"
 
 	"github.com/AdhityaRamadhanus/fasthttpcors"
-	"github.com/qiangxue/fasthttp-routing"
+	routing "github.com/qiangxue/fasthttp-routing"
 	"github.com/valyala/fasthttp"
 )
 
@@ -47,14 +48,18 @@ type MailModel struct {
 	Receivers                                             Receivers
 }
 
-var instantiated *RabbitMQ = nil
+var instantiated *RabbitMQ // NewRabbitMQ("amqp://skybbdjj:1iDqFi_H-qEs64PU13TWWtQG8jTGdEnk@fly.rmq.cloudamqp.com/skybbdjj", "mail-test-queue")
 
-func GetRabbitMQInstance(connStr string, QueueName string) *RabbitMQ {
-	if instantiated == nil {
-		instantiated = NewRabbitMQ(connStr, QueueName)
-	}
+var (
+	singleton *RabbitMQ
+	once      sync.Once
+)
 
-	return instantiated
+func Singleton() *RabbitMQ {
+	once.Do(func() {
+		singleton = NewRabbitMQ("amqp://skybbdjj:1iDqFi_H-qEs64PU13TWWtQG8jTGdEnk@fly.rmq.cloudamqp.com/skybbdjj", "mail-test-queue")
+	})
+	return singleton
 }
 
 func NewRabbitMQ(connStr string, QueueName string) *RabbitMQ {
@@ -62,7 +67,7 @@ func NewRabbitMQ(connStr string, QueueName string) *RabbitMQ {
 	var r = &RabbitMQ{ConnStr: connStr, QueueName: QueueName}
 	r.connect()
 
-	go r.reconnector()
+	r.reconnector()
 
 	return r
 }
@@ -114,27 +119,29 @@ func (r *RabbitMQ) connect() {
 	r.errorChannel = make(chan *amqp.Error)
 	r.Connection.NotifyClose(r.errorChannel)
 
-	createChannel(r)
+	r.createChannel()
 
 	fmt.Println("channel created.!")
 
-	QueueDeclare(r)
+	r.QueueDeclare()
 }
 
 func (q *RabbitMQ) reconnector() {
-	for {
-		err := <-q.errorChannel
-		if err != nil {
-			fmt.Println("Reconnecting after connection closed", err)
+	go func() {
+		for {
+			err := <-q.errorChannel
+			if err != nil {
+				fmt.Println("Reconnecting after connection closed", err)
 
-			q.connect()
-		} else {
-			return
+				//q.connect()
+			} else {
+				return
+			}
 		}
-	}
+	}()
 }
 
-func QueueDeclare(r *RabbitMQ) {
+func (r *RabbitMQ) QueueDeclare() {
 
 	_, err := r.Channel.QueueDeclare(
 		r.QueueName, // name of the queue
@@ -149,14 +156,13 @@ func QueueDeclare(r *RabbitMQ) {
 	}
 }
 
-func createChannel(r *RabbitMQ) {
+func (r *RabbitMQ) createChannel() {
 	ch, _ := r.Connection.Channel()
 	r.Channel = ch
 }
 
 func SendRabbit(ctx *routing.Context) error {
-
-	rmq := GetRabbitMQInstance("amqp://guest:guest@localhost:5672/", "mail-test-queue")
+	rmq := Singleton()
 
 	m := new(MailModel)
 
