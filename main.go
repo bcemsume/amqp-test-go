@@ -163,8 +163,14 @@ func (r *RabbitMQ) createChannel() {
 	r.Channel = ch
 }
 
+var (
+	strContentType     = []byte("Content-Type")
+	strApplicationJSON = []byte("application/json")
+)
+
 func SendRabbit(ctx *routing.Context) error {
 
+	ctx.Response.Header.SetCanonical(strContentType, strApplicationJSON)
 	rmq := GetRabbitMQInstance("amqp://localhost:5672/", "mail-test-queue")
 	m := new(MailModel)
 
@@ -176,6 +182,9 @@ func SendRabbit(ctx *routing.Context) error {
 
 	rmq.PublishMessage(m)
 
+	res, _ := jsoniter.Marshal(&m)
+
+	ctx.Write(res)
 	return nil
 }
 
